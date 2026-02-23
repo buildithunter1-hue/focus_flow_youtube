@@ -283,7 +283,7 @@ async def create_session(data: CreateSessionRequest, request: Request):
     if content_type == "youtube":
         video_id = extract_youtube_id(data.content_url)
         if video_id:
-            embed_info["embed_url"] = f"https://www.youtube-nocookie.com/embed/{video_id}?rel=0&modestbranding=1"
+            embed_info["embed_url"] = f"https://www.youtube.com/embed/{video_id}?rel=0&modestbranding=1&enablejsapi=1"
             embed_info["video_id"] = video_id
         else:
             embed_info["embed_url"] = data.content_url
