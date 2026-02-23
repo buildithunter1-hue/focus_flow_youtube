@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Watch Live Stream + Focus Tracker</title>
+
+  <!-- Focus tracker deps (from student.html) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      color: #e5e7eb;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 24px 32px;
+      border-radius: 16px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+    }
+    .header h1 { font-size: 28px; font-weight: 700; }
+    .header .subtitle { opacity: 0.9; font-size: 14px; margin-top: 4px; }
+
+    .card {
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid #334155;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      margin-bottom: 24px;
+    }
+    .card-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+
+    .join-section {
+      max-width: 520px;
+      margin: 80px auto;
+      text-align: center;
+    }
+    .join-section h2 { margin-bottom: 8px; font-size: 24px; }
+    .join-section p { color: #94a3b8; margin-bottom: 24px; }
+
+    input {
+      width: 100%;
+      padding: 14px 18px;
+      border: 2px solid #334155;
+      border-radius: 10px;
+      font-size: 16px;
+      margin-bottom: 16px;
+      background: #0f172a;
+      color: #e5e7eb;
+      transition: border-color 0.2s;
+    }
+    input:focus { outline: none; border-color: #667eea; }
+
+    .btn {
+      padding: 14px 28px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s;
+      width: 100%;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .btn-danger { background: #ef4444; color: white; }
+
+    .video-layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+    .video-layout.dual { grid-template-columns: 1fr 1fr; }
+    @media (max-width: 900px) {
+      .video-layout.dual { grid-template-columns: 1fr; }
+    }
+
+    .video-container {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .video-container video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .video-label {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      backdrop-filter: blur(10px);
+    }
+
+    .live-badge {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: #ef4444;
+      color: white;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      animation: pulse-live 2s infinite;
+    }
+    .live-badge.active { display: flex; }
+    @keyframes pulse-live {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: white; }
+
+    .status-bar {
+      text-align: center;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .status-bar.connected { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .status-bar.disconnected { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .status-bar.connecting { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+    .status-bar.waiting { background: rgba(102, 126, 234, 0.2); color: #667eea; }
+
+    .stream-info {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .stream-info-item {
+      background: #0f172a;
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      text-align: center;
+    }
+    .stream-info-value { font-size: 20px; font-weight: 700; color: #667eea; }
+    .stream-info-label { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+
+    .hidden { display: none; }
+
+    .waiting-screen {
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .waiting-screen h2 { margin-bottom: 12px; }
+    .waiting-screen p { color: #94a3b8; }
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #334155;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 24px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Active rooms list */
+    .room-list { margin-top: 24px; }
+    .room-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .room-item:hover { border-color: #667eea; transform: translateY(-2px); }
+    .room-live-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse-live 2s infinite;
+    }
+    .room-live-dot.offline { background: #64748b; animation: none; }
+    .room-details { flex: 1; }
+    .room-name { font-weight: 600; font-size: 16px; }
+    .room-teacher { font-size: 13px; color: #94a3b8; margin-top: 2px; }
+    .room-viewers { font-size: 13px; color: #667eea; }
+
+    /* Focus tracker UI */
+    .focus-grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 1000px) {
+      .focus-grid { grid-template-columns: 1fr; }
+    }
+    .focus-cam {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4/3;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .focus-cam video, .focus-cam canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    .focus-cam canvas { pointer-events: none; }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 700px) {
+      .metrics-grid { grid-template-columns: 1fr; }
+    }
+    .metric-card {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    .metric-label {
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: 0.4px;
+    }
+    .metric-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #e5e7eb;
+    }
+    .emotion-display { font-size: 34px; }
+    .emotion-name { font-size: 12px; color: #94a3b8; margin-top: 6px; text-transform: capitalize; }
+    .debug-info { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: #94a3b8; margin-top: 10px; }
+    .chart-wrap { height: 220px; margin-top: 16px; }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <!-- JOIN -->
+    <div id="joinSection" class="join-section card">
+      <h2>Watch Live Stream + Focus Tracking</h2>
+      <p>Join a room and track focus while watching the teacher</p>
+
+      <input type="text" id="roomIdInput" placeholder="Enter Room ID" />
+      <input type="text" id="studentIdInput" placeholder="Your Student ID" required />
+      <input type="text" id="studentNameInput" placeholder="Your Name (optional)" />
+      <input type="password" id="roomPasswordInput" placeholder="Room Password (if required)" />
+
+      <button class="btn btn-primary" onclick="joinRoom()">Join Stream</button>
+
+      <div class="room-list" id="roomList">
+        <div class="card-title" style="margin-top: 24px;">Active Streams</div>
+        <div id="roomListContent" style="color: #94a3b8; text-align: center; padding: 20px;">Loading...</div>
+      </div>
+    </div>
+
+    <!-- WATCH -->
+    <div id="watchSection" class="hidden">
+      <div class="header">
+        <div>
+          <h1 id="streamTitle">Live Stream</h1>
+          <p class="subtitle">Teacher: <span id="teacherNameDisplay">--</span></p>
+          <p class="subtitle" style="opacity:.85;">Student: <span id="studentNameDisplay">--</span> (ID: <span id="studentIdDisplay">--</span>)</p>
+        </div>
+        <div>
+          <button class="btn btn-danger" style="padding: 10px 20px; font-size: 14px; width: auto;" onclick="leaveStream()">Leave</button>
+        </div>
+      </div>
+
+      <div id="statusBar" class="status-bar connecting">Connecting...</div>
+
+      <div id="waitingScreen" class="card waiting-screen hidden">
+        <div class="spinner"></div>
+        <h2>Waiting for teacher to go live...</h2>
+        <p>The stream will start automatically when the teacher begins broadcasting</p>
+      </div>
+
+      <div class="card" id="videoCard" style="display:none;">
+        <div class="video-layout" id="videoLayout">
+          <div>
+            <div class="video-container" id="cameraContainer">
+              <video id="cameraVideo" autoplay playsinline></video>
+              <div class="live-badge active" id="liveBadge">
+                <div class="live-dot"></div>
+                LIVE
+              </div>
+              <div class="video-label">Camera</div>
+            </div>
+          </div>
+          <div id="screenContainer" style="display: none;">
+            <div class="video-container">
+              <video id="screenVideo" autoplay playsinline></video>
+              <div class="video-label">Screen Share</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stream-info">
+          <div class="stream-info-item">
+            <div class="stream-info-value" id="streamDuration">00:00</div>
+            <div class="stream-info-label">Duration</div>
+          </div>
+          <div class="stream-info-item">
+            <div class="stream-info-value" id="streamQuality">--</div>
+            <div class="stream-info-label">Quality</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOCUS TRACKER (merged from student.html) -->
+      <div class="card" id="focusCard">
+        <div class="card-title">Focus Tracker (While Watching)</div>
+        <div id="focusStatusBar" class="status-bar connecting">Initializing focus tracker...</div>
+
+        <div class="focus-grid">
+          <div>
+            <div class="focus-cam">
+              <video id="webcam" autoplay muted playsinline></video>
+              <canvas id="canvas"></canvas>
+            </div>
+            <div class="debug-info" id="debugInfo">Initializing face detection...</div>
+          </div>
+
+          <div>
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <div class="metric-label">Attention</div>
+                <div class="metric-value" id="attentionScore">--</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Engagement</div>
+                <div class="metric-value" id="engagementLevel">--</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Mood</div>
+                <div class="emotion-display" id="emotionDisplay">--</div>
+                <div class="emotion-name" id="emotionName">detecting...</div>
+              </div>
+            </div>
+
+            <div class="chart-wrap">
+              <canvas id="attentionChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // =========================
+    // STREAM (your existing code)
+    // =========================
+    let ws = null;
+    let pc = null;
+    let roomId = null;
+    let studentId = null;
+    let studentName = null;
+    let streamStartTime = null;
+    let durationInterval = null;
+    let receivedStreams = [];
+
+    const ICE_SERVERS = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+
+    // Pre-fill roomId if URL is /stream/watch/{room_id}
+    const urlParts = window.location.pathname.split('/');
+    if (urlParts.length >= 4 && urlParts[2] === 'watch') {
+      const urlRoomId = urlParts[3];
+      if (urlRoomId) document.getElementById('roomIdInput').value = urlRoomId;
+    }
+
+    loadActiveRooms();
+
+    async function loadActiveRooms() {
+      try {
+        const resp = await fetch('/api/stream/rooms/active');
+        const data = await resp.json();
+        const container = document.getElementById('roomListContent');
+
+        if (!data.rooms || data.rooms.length === 0) {
+          container.innerHTML = '<p>No active streams right now</p>';
+          return;
+        }
+
+        container.innerHTML = data.rooms.map(r => `
+          <div class="room-item" onclick="document.getElementById('roomIdInput').value='${r.room_id}'; joinRoom();">
+            <div class="room-live-dot ${r.is_live ? '' : 'offline'}"></div>
+            <div class="room-details">
+              <div class="room-name">${r.room_name}</div>
+              <div class="room-teacher">by ${r.teacher_name}</div>
+            </div>
+            <div class="room-viewers">${r.viewer_count} watching</div>
+          </div>
+        `).join('');
+      } catch (e) {
+        document.getElementById('roomListContent').innerHTML = '<p>Could not load rooms</p>';
+      }
+    }
+
+    async function joinRoom() {
+      roomId = document.getElementById('roomIdInput').value.trim();
+      const sidInput = document.getElementById('studentIdInput').value.trim();
+      const snameInput = document.getElementById('studentNameInput').value.trim();
+      const password = document.getElementById('roomPasswordInput').value.trim();
+
+      if (!roomId) { alert('Please enter a Room ID'); return; }
+      if (!sidInput) { alert('Please enter your Student ID'); return; }
+
+      studentId = sidInput;
+      studentName = snameInput || `Student ${studentId}`;
+
+      try {
+        const infoResp = await fetch(`/api/stream/room/${roomId}/info`);
+        if (!infoResp.ok) { alert('Room not found'); return; }
+        const info = await infoResp.json();
+
+        if (info.requires_password && !password) {
+          alert('This room requires a password');
+          return;
+        }
+
+        document.getElementById('streamTitle').textContent = info.room_name;
+        document.getElementById('teacherNameDisplay').textContent = info.teacher_name;
+
+        document.getElementById('studentIdDisplay').textContent = studentId;
+        document.getElementById('studentNameDisplay').textContent = studentName;
+
+        document.getElementById('joinSection').classList.add('hidden');
+        document.getElementById('watchSection').classList.remove('hidden');
+
+        if (!info.is_live) {
+          document.getElementById('waitingScreen').classList.remove('hidden');
+          document.getElementById('videoCard').style.display = 'none';
+          updateStatus('waiting', 'Waiting for teacher to go live...');
+        }
+
+        connectWebSocket(password);
+
+        // Start focus tracking immediately after joining room
+        startFocusTracker();
+      } catch (e) {
+        alert('Failed to join: ' + e.message);
+      }
+    }
+
+    function connectWebSocket(password) {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const params = new URLSearchParams({ student_id: studentId, name: studentName });
+      if (password) params.append('password', password);
+
+      const wsUrl = `${protocol}//${location.host}/api/stream/ws/student/${roomId}?${params}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => updateStatus('connecting', 'Connected to room, waiting for stream...');
+
+      ws.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === 'joined') {
+          // Keep whatever server returns (but we keep our studentId stable)
+          if (data.is_live) updateStatus('connected', 'Stream is live!');
+        } else if (data.type === 'offer') {
+          await handleOffer(data.sdp, data.stream_kind);
+        } else if (data.type === 'ice_candidate') {
+          await handleIceCandidate(data.candidate);
+        } else if (data.type === 'stream_update') {
+          handleStreamUpdate(data.stream_type);
+        } else if (data.type === 'teacher_disconnected') {
+          handleTeacherDisconnected();
+        } else if (data.type === 'room_closed') {
+          handleRoomClosed();
+        }
+      };
+
+      ws.onclose = () => updateStatus('disconnected', 'Disconnected from room');
+      ws.onerror = () => updateStatus('disconnected', 'Connection error');
+    }
+
+    async function handleOffer(sdp, streamKind) {
+      if (pc) pc.close();
+
+      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+      receivedStreams = [];
+
+      pc.ontrack = (event) => {
+        const stream = event.streams[0];
+        if (!stream) return;
+
+        const existingIds = receivedStreams.map(s => s.id);
+        if (!existingIds.includes(stream.id)) receivedStreams.push(stream);
+
+        if (receivedStreams.length === 1) {
+          document.getElementById('cameraVideo').srcObject = stream;
+          document.getElementById('waitingScreen').classList.add('hidden');
+          document.getElementById('videoCard').style.display = 'block';
+          document.getElementById('liveBadge').classList.add('active');
+          updateStatus('connected', 'Stream is live!');
+
+          if (!streamStartTime) {
+            streamStartTime = Date.now();
+            startDurationTimer();
+          }
+        }
+
+        if (receivedStreams.length >= 2) {
+          document.getElementById('screenVideo').srcObject = receivedStreams[1];
+          document.getElementById('screenContainer').style.display = 'block';
+          document.getElementById('videoLayout').classList.add('dual');
+        }
+
+        updateQuality(stream);
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate && ws) {
+          ws.send(JSON.stringify({
+            type: 'ice_candidate',
+            candidate: event.candidate.toJSON(),
+          }));
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') updateStatus('connected', 'Stream connected');
+        else if (pc.connectionState === 'disconnected') updateStatus('disconnected', 'Stream disconnected');
+      };
+
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      ws.send(JSON.stringify({
+        type: 'answer',
+        sdp: pc.localDescription.toJSON(),
+      }));
+    }
+
+    async function handleIceCandidate(candidate) {
+      if (!pc || !candidate) return;
+      try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); }
+      catch (e) { console.error('ICE candidate error:', e); }
+    }
+
+    function handleStreamUpdate(streamType) {
+      if (streamType === 'camera+screen') {
+        document.getElementById('screenContainer').style.display = 'block';
+        document.getElementById('videoLayout').classList.add('dual');
+      } else {
+        document.getElementById('screenContainer').style.display = 'none';
+        document.getElementById('videoLayout').classList.remove('dual');
+      }
+    }
+
+    function handleTeacherDisconnected() {
+      updateStatus('waiting', 'Teacher disconnected. Waiting for reconnection...');
+      document.getElementById('liveBadge').classList.remove('active');
+    }
+
+    function handleRoomClosed() {
+      updateStatus('disconnected', 'Stream has ended');
+      if (pc) { pc.close(); pc = null; }
+      if (ws) { ws.close(); ws = null; }
+      stopDurationTimer();
+      alert('The stream has ended.');
+    }
+
+    function updateStatus(type, message) {
+      const bar = document.getElementById('statusBar');
+      bar.className = 'status-bar ' + type;
+      bar.textContent = message;
+    }
+
+    function updateQuality(stream) {
+      const videoTracks = stream.getVideoTracks();
+      if (videoTracks.length > 0) {
+        const settings = videoTracks[0].getSettings();
+        if (settings.width && settings.height) {
+          const h = settings.height;
+          let label = 'SD';
+          if (h >= 1080) label = '1080p';
+          else if (h >= 720) label = '720p';
+          else if (h >= 480) label = '480p';
+          document.getElementById('streamQuality').textContent = label;
+        }
+      }
+    }
+
+    function startDurationTimer() {
+      durationInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - streamStartTime) / 1000);
+        const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+        const secs = (elapsed % 60).toString().padStart(2, '0');
+        document.getElementById('streamDuration').textContent = `${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function stopDurationTimer() {
+      if (durationInterval) { clearInterval(durationInterval); durationInterval = null; }
+    }
+
+    // =========================
+    // FOCUS TRACKER (merged from student.html)
+    // =========================
+    const POLL_INTERVAL = 30 * 1000;
+    const EMOTION_DETECT_INTERVAL = 500;
+
+    let studentGuid = null;
+    let faceMesh = null;
+    let camera = null;
+    let faceApiReady = false;
+    let emotionHistory = [];
+    let currentEmotion = 'neutral';
+    let lastEmotionDetectTime = 0;
+    let previousAttentionScore = 0;
+    let eyesClosedCount = 0;
+
+    let isSessionActive = false;
+    let isPaused = false;
+
+    let attentionChart = null;
+    let attentionData = [];
+    let reportIntervalId = null;
+
+    let batchAccumulator = {
+      count: 0,
+      attentionSum: 0,
+      facePresentCount: 0,
+      gazeOnScreenCount: 0,
+      eyesClosedCount: 0,
+      emotions: {}
+    };
+
+    const emotionEmojis = {
+      happy: '🙂', surprised: '😮', angry: '😠', sad: '😢',
+      fearful: '😨', disgusted: '🤢', neutral: '😐'
+    };
+
+    const LEFT_EYE_IDX = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398];
+    const RIGHT_EYE_IDX = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246];
+    const RIGHT_IRIS_CENTER = 468;
+    const LEFT_IRIS_CENTER = 473;
+
+    let windowFocused = true;
+    window.addEventListener('focus', () => windowFocused = true);
+    window.addEventListener('blur', () => windowFocused = false);
+
+    function setFocusStatus(type, message) {
+      const el = document.getElementById('focusStatusBar');
+      if (!el) return;
+      el.className = 'status-bar ' + type;
+      el.textContent = message;
+    }
+
+    async function loadFaceApiModels() {
+      try {
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+        ]);
+        faceApiReady = true;
+        return true;
+      } catch (e) {
+        console.error('Failed to load face-api models:', e);
+        faceApiReady = false;
+        return false;
+      }
+    }
+
+    async function detectEmotionWithFaceApi(video) {
+      if (!faceApiReady || !video) return null;
+      try {
+        const detection = await faceapi
+          .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+          .withFaceExpressions();
+
+        if (!detection?.expressions) return null;
+
+        let maxEmotion = 'neutral';
+        let maxProb = 0;
+        for (const [emo, prob] of Object.entries(detection.expressions)) {
+          if (prob > maxProb) { maxProb = prob; maxEmotion = emo; }
+        }
+        return maxEmotion;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function getSmoothedEmotion(cur) {
+      emotionHistory.push(cur);
+      if (emotionHistory.length > 5) emotionHistory.shift();
+
+      const counts = {};
+      for (const e of emotionHistory) counts[e] = (counts[e] || 0) + 1;
+
+      let best = cur, bestC = 0;
+      for (const [e, c] of Object.entries(counts)) {
+        if (c > bestC) { bestC = c; best = e; }
+      }
+      return best;
+    }
+
+    function euclideanDist(a, b, width, height) {
+      const dx = (a.x - b.x) * width;
+      const dy = (a.y - b.y) * height;
+      return Math.hypot(dx, dy);
+    }
+
+    function eyeAspectRatio(landmarks, indices, width, height) {
+      // Works if the first 6 indices exist; in your arrays they do.
+      const [p1, p2, p3, p4, p5, p6] = indices.slice(0, 6).map(i => landmarks[i]);
+      const v1 = euclideanDist(p2, p6, width, height);
+      const v2 = euclideanDist(p3, p5, width, height);
+      const h  = euclideanDist(p1, p4, width, height);
+      return h <= 1e-6 ? 0 : (v1 + v2) / (2.0 * h);
+    }
+
+    function estimateGazeDirection(landmarks) {
+      const rightEyeInner = landmarks[133];
+      const rightEyeOuter = landmarks[33];
+      const leftEyeInner = landmarks[362];
+      const leftEyeOuter = landmarks[263];
+      const rightIris = landmarks[RIGHT_IRIS_CENTER];
+      const leftIris = landmarks[LEFT_IRIS_CENTER];
+
+      if (!rightEyeInner || !rightEyeOuter || !leftEyeInner || !leftEyeOuter || !rightIris || !leftIris) {
+        return { lookingCenter: true };
+      }
+
+      const rightEyeWidth = rightEyeOuter.x - rightEyeInner.x;
+      const rightIrisRatio = (rightIris.x - rightEyeInner.x) / (rightEyeWidth + 0.001);
+
+      const leftEyeWidth = leftEyeInner.x - leftEyeOuter.x;
+      const leftIrisRatio = (leftIris.x - leftEyeOuter.x) / (leftEyeWidth + 0.001);
+
+      const avg = (rightIrisRatio + leftIrisRatio) / 2;
+      return { lookingCenter: avg > 0.35 && avg < 0.65 };
+    }
+
+    function estimateHeadInFocus(landmarks) {
+      const leftEye = landmarks[33];
+      const rightEye = landmarks[263];
+      const nose = landmarks[1];
+      if (!leftEye || !rightEye || !nose) return { inFocus: true };
+
+      const midEyeX = (leftEye.x + rightEye.x) / 2.0;
+      const offsetX = Math.abs(nose.x - midEyeX);
+      return { inFocus: offsetX < 0.06 };
+    }
+
+    function initAttentionChart() {
+      const el = document.getElementById('attentionChart');
+      if (!el) return;
+      const ctx = el.getContext('2d');
+      attentionChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ data: [], fill: true, tension: 0.35 }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, max: 100, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+            x: { ticks: { color: '#94a3b8', maxTicksLimit: 6 }, grid: { color: '#334155' } }
+          }
+        }
+      });
+    }
+
+    function updateAttentionChart() {
+      if (!attentionChart) return;
+      attentionChart.data.labels = attentionData.map(d => d.time);
+      attentionChart.data.datasets[0].data = attentionData.map(d => d.value);
+      attentionChart.update('none');
+    }
+
+    function updateFocusUI(attention, engagement, emotion) {
+      const scoreEl = document.getElementById('attentionScore');
+      const engEl = document.getElementById('engagementLevel');
+      const emoEl = document.getElementById('emotionDisplay');
+      const emoNameEl = document.getElementById('emotionName');
+
+      if (scoreEl) scoreEl.textContent = attention + '%';
+      if (engEl) engEl.textContent = engagement.toUpperCase();
+      if (emoEl) emoEl.textContent = emotionEmojis[emotion] || '😐';
+      if (emoNameEl) emoNameEl.textContent = emotion;
+    }
+
+    function resetAccumulator() {
+      batchAccumulator = {
+        count: 0, attentionSum: 0, facePresentCount: 0,
+        gazeOnScreenCount: 0, eyesClosedCount: 0, emotions: {}
+      };
+    }
+
+    async function joinAnalytics() {
+      try {
+        const resp = await fetch('/api/student/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ student_id: studentId, name: studentName })
+        });
+        if (!resp.ok) throw new Error('join failed');
+        const result = await resp.json();
+        studentGuid = result.guid;
+        setFocusStatus('connected', 'Focus tracker connected');
+      } catch (e) {
+        setFocusStatus('disconnected', 'Focus tracker cannot reach backend');
+      }
+    }
+
+    async function sendReport() {
+      if (!isSessionActive || isPaused || batchAccumulator.count === 0) return;
+
+      const count = batchAccumulator.count;
+      const avgAttention = Math.round(batchAccumulator.attentionSum / count);
+      const faceRatio = batchAccumulator.facePresentCount / count;
+      const gazeRatio = batchAccumulator.gazeOnScreenCount / count;
+
+      let dominantEmotion = 'neutral', maxC = 0;
+      for (const [emo, c] of Object.entries(batchAccumulator.emotions)) {
+        if (c > maxC) { maxC = c; dominantEmotion = emo; }
+      }
+
+      const engagementLevel = avgAttention >= 70 ? 'high' : avgAttention >= 40 ? 'medium' : 'low';
+
+      const payload = {
+        student_id: studentId,
+        name: studentName,
+        guid: studentGuid,
+        face_present_ratio: Number(faceRatio.toFixed(2)),
+        gaze_on_screen_ratio: Number(gazeRatio.toFixed(2)),
+        blink_rate: 0,
+        attention_score: avgAttention,
+        emotion: dominantEmotion,
+        engagement_level: engagementLevel,
+        // Extra context for "watching teacher stream"
+        watch_signals: {
+          room_id: roomId,
+          visible: document.visibilityState === 'visible',
+          window_focused: windowFocused
+        }
+      };
+
+      try {
+        const resp = await fetch('/api/student/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (resp.ok) setFocusStatus('connected', 'Monitoring active');
+        else setFocusStatus('disconnected', 'Update failed');
+
+        attentionData.push({ time: new Date().toLocaleTimeString(), value: avgAttention });
+        if (attentionData.length > 20) attentionData.shift();
+        updateAttentionChart();
+
+        resetAccumulator();
+      } catch (e) {
+        setFocusStatus('disconnected', 'Update error');
+      }
+    }
+
+    async function startMediaPipe() {
+      const video = document.getElementById('webcam');
+      const canvas = document.getElementById('canvas');
+      if (!video || !canvas) return;
+
+      const ctx = canvas.getContext('2d');
+
+      let attempts = 0;
+      while ((!window.Camera || !window.FaceMesh) && attempts < 50) {
+        await new Promise(r => setTimeout(r, 100));
+        attempts++;
+      }
+      if (!window.FaceMesh) {
+        setFocusStatus('disconnected', 'FaceMesh failed to load');
+        return;
+      }
+
+      faceMesh = new window.FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+      });
+
+      faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      faceMesh.onResults((results) => onResults(results, canvas, ctx));
+
+      camera = new window.Camera(video, {
+        onFrame: async () => await faceMesh.send({ image: video }),
+        width: 640,
+        height: 480
+      });
+
+      try {
+        await camera.start();
+        setFocusStatus('connected', 'Camera started (focus tracking)');
+      } catch (e) {
+        setFocusStatus('disconnected', 'Camera permission denied');
+      }
+    }
+
+    function onResults(results, canvas, ctx) {
+      if (!results?.image || isPaused) return;
+
+      if (canvas.width !== results.image.width) {
+        canvas.width = results.image.width;
+        canvas.height = results.image.height;
+      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      let currentAttention = 0;
+      let emotion = 'neutral';
+
+      if (results.multiFaceLandmarks?.length) {
+        const landmarks = results.multiFaceLandmarks[0];
+
+        const headPose = estimateHeadInFocus(landmarks);
+        const gaze = estimateGazeDirection(landmarks);
+
+        const now = Date.now();
+        if (faceApiReady && (now - lastEmotionDetectTime) >= EMOTION_DETECT_INTERVAL) {
+          lastEmotionDetectTime = now;
+          detectEmotionWithFaceApi(document.getElementById('webcam')).then(detected => {
+            if (detected) currentEmotion = getSmoothedEmotion(detected);
+          });
+        }
+        emotion = currentEmotion;
+
+        const leftEAR = eyeAspectRatio(landmarks, LEFT_EYE_IDX, canvas.width, canvas.height);
+        const rightEAR = eyeAspectRatio(landmarks, RIGHT_EYE_IDX, canvas.width, canvas.height);
+        const avgEAR = (leftEAR + rightEAR) / 2.0;
+        const eyesClosed = avgEAR < 0.21;
+
+        eyesClosedCount = eyesClosed ? (eyesClosedCount + 1) : Math.max(0, eyesClosedCount - 1);
+        const prolongedEyesClosed = eyesClosedCount > 10;
+
+        let targetScore = 0;
+        if (headPose.inFocus) targetScore += 0.35;
+        if (gaze.lookingCenter) targetScore += 0.35;
+        if (!eyesClosed) targetScore += 0.15;
+        if (emotion === 'happy' || emotion === 'neutral') targetScore += 0.15;
+        if (prolongedEyesClosed) targetScore = Math.min(targetScore, 0.25);
+
+        const rate = targetScore > previousAttentionScore ? 0.12 : 0.08;
+        const smoothed = previousAttentionScore + (targetScore - previousAttentionScore) * rate;
+        previousAttentionScore = smoothed;
+        currentAttention = Math.round(smoothed * 100);
+
+        batchAccumulator.count++;
+        batchAccumulator.attentionSum += currentAttention;
+        batchAccumulator.facePresentCount++;
+        if (gaze.lookingCenter) batchAccumulator.gazeOnScreenCount++;
+        if (eyesClosed) batchAccumulator.eyesClosedCount++;
+        batchAccumulator.emotions[emotion] = (batchAccumulator.emotions[emotion] || 0) + 1;
+
+        const dbg = document.getElementById('debugInfo');
+        if (dbg) dbg.textContent = `Head:${headPose.inFocus?'OK':'Away'} | Gaze:${gaze.lookingCenter?'OK':'Away'} | Emotion:${emotion} | EAR:${avgEAR.toFixed(2)}`;
+      } else {
+        previousAttentionScore *= 0.95;
+        currentAttention = Math.round(previousAttentionScore * 100);
+
+        batchAccumulator.count++;
+        batchAccumulator.attentionSum += currentAttention;
+        batchAccumulator.emotions['neutral'] = (batchAccumulator.emotions['neutral'] || 0) + 1;
+
+        const dbg = document.getElementById('debugInfo');
+        if (dbg) dbg.textContent = 'No face detected';
+      }
+
+      const engagement = currentAttention >= 70 ? 'high' : currentAttention >= 40 ? 'medium' : 'low';
+      updateFocusUI(currentAttention, engagement, emotion);
+    }
+
+    async function startFocusTracker() {
+      if (isSessionActive) return;
+
+      setFocusStatus('connecting', 'Loading focus models...');
+      if (!attentionChart) initAttentionChart();
+
+      await loadFaceApiModels();
+      await joinAnalytics();
+
+      isSessionActive = true;
+
+      // first report soon, then every 30s
+      setTimeout(sendReport, 10_000);
+      reportIntervalId = setInterval(sendReport, POLL_INTERVAL);
+
+      await startMediaPipe();
+    }
+
+    async function analyticsLeave() {
+      if (!studentId) return;
+      try {
+        await fetch('/api/student/leave', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ student_id: studentId, name: studentName }),
+          keepalive: true
+        });
+      } catch {}
+    }
+
+    // =========================
+    // LEAVE (stream + focus)
+    // =========================
+    async function leaveStream() {
+      // Stop focus
+      isSessionActive = false;
+      if (reportIntervalId) { clearInterval(reportIntervalId); reportIntervalId = null; }
+      await sendReport();
+      await analyticsLeave();
+      if (camera) { try { camera.stop(); } catch {} camera = null; }
+
+      // Stop stream
+      if (pc) { pc.close(); pc = null; }
+      if (ws) { ws.close(); ws = null; }
+      stopDurationTimer();
+      location.href = '/stream/watch';
+    }
+
+    window.addEventListener('beforeunload', async () => {
+      try {
+        isSessionActive = false;
+        if (reportIntervalId) { clearInterval(reportIntervalId); reportIntervalId = null; }
+        await sendReport();
+        await analyticsLeave();
+      } catch {}
+      if (camera) { try { camera.stop(); } catch {} }
+    });
+  </script>
+
+  <!--
+    Backend note:
+    /api/student/update must accept extra field "watch_signals".
+    If you use strict Pydantic models, add watch_signals: dict | None = None
+    OR enable extra="allow".
+  -->
+</body>
+</html>

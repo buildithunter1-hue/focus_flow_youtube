@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Live Stream - Focus Tracker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      color: #e5e7eb;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 24px 32px;
+      border-radius: 16px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+    }
+    .header h1 { font-size: 28px; font-weight: 700; }
+    .header .subtitle { opacity: 0.9; font-size: 14px; margin-top: 4px; }
+    .card {
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid #334155;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      margin-bottom: 24px;
+    }
+    .card-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+    .login-section {
+      max-width: 450px;
+      margin: 80px auto;
+      text-align: center;
+    }
+    .login-section h2 { margin-bottom: 8px; font-size: 24px; }
+    .login-section p { color: #94a3b8; margin-bottom: 24px; }
+    input, select {
+      width: 100%;
+      padding: 14px 18px;
+      border: 2px solid #334155;
+      border-radius: 10px;
+      font-size: 16px;
+      margin-bottom: 16px;
+      background: #0f172a;
+      color: #e5e7eb;
+      transition: border-color 0.2s;
+    }
+    input:focus, select:focus { outline: none; border-color: #667eea; }
+    .btn {
+      padding: 14px 28px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      width: 100%;
+    }
+    .btn-success { background: #22c55e; color: white; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-secondary { background: #334155; color: #e5e7eb; }
+    .btn-warning { background: #f59e0b; color: #1a1a2e; }
+    .stream-layout {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 24px;
+    }
+    @media (max-width: 1000px) { .stream-layout { grid-template-columns: 1fr; } }
+    .video-container {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16/9;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .video-container video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .live-badge {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: #ef4444;
+      color: white;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      animation: pulse-live 2s infinite;
+    }
+    .live-badge.active { display: flex; }
+    @keyframes pulse-live {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: white; }
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .control-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 16px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      color: #e5e7eb;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px;
+    }
+    .control-btn:hover { border-color: #667eea; background: #1e293b; }
+    .control-btn.active { border-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+    .control-btn.muted { border-color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+    .control-icon { font-size: 28px; }
+    .viewer-list { max-height: 400px; overflow-y: auto; }
+    .viewer-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      border: 1px solid #334155;
+    }
+    .viewer-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+    .viewer-name { flex: 1; font-size: 14px; }
+    .viewer-count {
+      text-align: center;
+      padding: 16px;
+      background: #0f172a;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      border: 1px solid #334155;
+    }
+    .viewer-count-num { font-size: 36px; font-weight: 700; color: #667eea; }
+    .viewer-count-label { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+    .room-info {
+      background: #0f172a;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      border: 1px solid #334155;
+    }
+    .room-info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #1e293b;
+      font-size: 13px;
+    }
+    .room-info-row:last-child { border-bottom: none; }
+    .room-info-label { color: #94a3b8; }
+    .room-info-value { font-weight: 600; }
+    .copy-btn {
+      background: #334155;
+      border: none;
+      color: #e5e7eb;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .copy-btn:hover { background: #475569; }
+    .status-bar {
+      text-align: center;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    .status-bar.connected { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .status-bar.disconnected { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .status-bar.connecting { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+    .hidden { display: none; }
+    .setup-section { max-width: 600px; margin: 0 auto; }
+    .setup-section h2 { margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="loginSection" class="login-section card">
+      <h2>Teacher Login</h2>
+      <p>Sign in to start a live stream for your students</p>
+      <input type="text" id="usernameInput" placeholder="Username">
+      <input type="password" id="passwordInput" placeholder="Password">
+      <button class="btn btn-primary" onclick="login()">Sign In</button>
+      <p id="loginError" style="color: #ef4444; margin-top: 12px; display: none;"></p>
+    </div>
+
+    <div id="setupSection" class="hidden">
+      <div class="header">
+        <div>
+          <h1>Start Live Stream</h1>
+          <p class="subtitle">Configure your stream before going live</p>
+        </div>
+        <div>
+          <span style="font-size: 14px; opacity: 0.9;">Welcome, <span id="teacherNameSetup">--</span></span>
+        </div>
+      </div>
+      <div class="setup-section card">
+        <h2>Room Settings</h2>
+        <input type="text" id="roomNameInput" placeholder="Room name (e.g. Math 101)">
+        <input type="password" id="roomPasswordInput" placeholder="Room password (optional)">
+        <button class="btn btn-primary" onclick="createRoom()">Create Room & Preview</button>
+      </div>
+    </div>
+
+    <div id="streamSection" class="hidden">
+      <div class="header">
+        <div>
+          <h1>Live Stream</h1>
+          <p class="subtitle" id="roomNameDisplay">--</p>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 14px; opacity: 0.9;">Teacher: <span id="teacherNameStream">--</span></div>
+          <button class="btn btn-danger" style="margin-top: 8px; padding: 8px 16px; font-size: 13px;" onclick="endStream()">End Stream</button>
+        </div>
+      </div>
+
+      <div class="stream-layout">
+        <div class="left-col">
+          <div class="card">
+            <div class="card-title">Camera Preview</div>
+            <div id="statusBar" class="status-bar connecting">Initializing...</div>
+            <div class="video-container">
+              <video id="cameraPreview" autoplay muted playsinline></video>
+              <div class="live-badge" id="liveBadge">
+                <div class="live-dot"></div>
+                LIVE
+              </div>
+            </div>
+            <div class="controls-grid">
+              <div class="control-btn active" id="cameraBtn" onclick="toggleCamera()">
+                <span class="control-icon">&#127909;</span>
+                <span id="cameraLabel">Camera On</span>
+              </div>
+              <div class="control-btn active" id="micBtn" onclick="toggleMic()">
+                <span class="control-icon">&#127908;</span>
+                <span id="micLabel">Mic On</span>
+              </div>
+              <div class="control-btn" id="screenBtn" onclick="toggleScreenShare()">
+                <span class="control-icon">&#128187;</span>
+                <span id="screenLabel">Share Screen</span>
+              </div>
+              <div class="control-btn" id="goLiveBtn" onclick="goLive()">
+                <span class="control-icon">&#128308;</span>
+                <span id="goLiveLabel">Go Live</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" id="screenPreviewCard" style="display: none;">
+            <div class="card-title">Screen Share Preview</div>
+            <div class="video-container">
+              <video id="screenPreview" autoplay muted playsinline></video>
+            </div>
+            <button class="btn btn-danger" style="margin-top: 12px;" onclick="stopScreenShare()">Stop Screen Share</button>
+          </div>
+        </div>
+
+        <div class="right-col">
+          <div class="card">
+            <div class="card-title">Room Info</div>
+            <div class="room-info">
+              <div class="room-info-row">
+                <span class="room-info-label">Room ID</span>
+                <span>
+                  <span class="room-info-value" id="roomIdDisplay">--</span>
+                  <button class="copy-btn" onclick="copyRoomId()">Copy</button>
+                </span>
+              </div>
+              <div class="room-info-row">
+                <span class="room-info-label">Join Link</span>
+                <button class="copy-btn" onclick="copyJoinLink()">Copy Link</button>
+              </div>
+              <div class="room-info-row">
+                <span class="room-info-label">Status</span>
+                <span class="room-info-value" id="streamStatus">Preview</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Viewers</div>
+            <div class="viewer-count">
+              <div class="viewer-count-num" id="viewerCount">0</div>
+              <div class="viewer-count-label">Connected Students</div>
+            </div>
+            <div class="viewer-list" id="viewerList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let authToken = null;
+let teacherName = '';
+let roomId = null;
+let cameraStream = null;
+let screenStream = null;
+let ws = null;
+let isLive = false;
+let cameraEnabled = true;
+let micEnabled = true;
+let screenSharing = false;
+let peerConnections = {};
+let viewers = {};
+
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+
+async function login() {
+  const username = document.getElementById('usernameInput').value.trim();
+  const password = document.getElementById('passwordInput').value.trim();
+  const errEl = document.getElementById('loginError');
+
+  if (!username || !password) {
+    errEl.textContent = 'Please enter username and password';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api/stream/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teacher_name: username, password: password }),
+    });
+
+    if (!resp.ok) {
+      errEl.textContent = 'Invalid credentials';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    const data = await resp.json();
+    authToken = data.token;
+    teacherName = data.teacher_name;
+    document.getElementById('teacherNameSetup').textContent = teacherName;
+    document.getElementById('loginSection').classList.add('hidden');
+    document.getElementById('setupSection').classList.remove('hidden');
+  } catch (e) {
+    errEl.textContent = 'Connection error';
+    errEl.style.display = 'block';
+  }
+}
+
+async function createRoom() {
+  const roomName = document.getElementById('roomNameInput').value.trim();
+  const roomPassword = document.getElementById('roomPasswordInput').value.trim();
+
+  try {
+    const resp = await fetch('/api/stream/room/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        teacher_name: teacherName,
+        room_name: roomName || undefined,
+        password: roomPassword || undefined,
+      }),
+    });
+
+    if (!resp.ok) throw new Error('Failed to create room');
+
+    const data = await resp.json();
+    roomId = data.room_id;
+
+    document.getElementById('teacherNameStream').textContent = teacherName;
+    document.getElementById('roomNameDisplay').textContent = data.room_name;
+    document.getElementById('roomIdDisplay').textContent = roomId;
+
+    document.getElementById('setupSection').classList.add('hidden');
+    document.getElementById('streamSection').classList.remove('hidden');
+
+    await startCamera();
+  } catch (e) {
+    alert('Failed to create room: ' + e.message);
+  }
+}
+
+async function startCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: true,
+    });
+    document.getElementById('cameraPreview').srcObject = cameraStream;
+    updateStatus('connected', 'Camera ready - click "Go Live" to start streaming');
+  } catch (e) {
+    updateStatus('disconnected', 'Camera access denied: ' + e.message);
+  }
+}
+
+function toggleCamera() {
+  if (!cameraStream) return;
+  const tracks = cameraStream.getVideoTracks();
+  cameraEnabled = !cameraEnabled;
+  tracks.forEach(t => t.enabled = cameraEnabled);
+
+  const btn = document.getElementById('cameraBtn');
+  const label = document.getElementById('cameraLabel');
+  if (cameraEnabled) {
+    btn.classList.remove('muted');
+    btn.classList.add('active');
+    label.textContent = 'Camera On';
+  } else {
+    btn.classList.remove('active');
+    btn.classList.add('muted');
+    label.textContent = 'Camera Off';
+  }
+}
+
+function toggleMic() {
+  if (!cameraStream) return;
+  const tracks = cameraStream.getAudioTracks();
+  micEnabled = !micEnabled;
+  tracks.forEach(t => t.enabled = micEnabled);
+
+  const btn = document.getElementById('micBtn');
+  const label = document.getElementById('micLabel');
+  if (micEnabled) {
+    btn.classList.remove('muted');
+    btn.classList.add('active');
+    label.textContent = 'Mic On';
+  } else {
+    btn.classList.remove('active');
+    btn.classList.add('muted');
+    label.textContent = 'Mic Off';
+  }
+}
+
+async function toggleScreenShare() {
+  if (screenSharing) {
+    stopScreenShare();
+    return;
+  }
+
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: 'always' },
+      audio: true,
+    });
+
+    document.getElementById('screenPreview').srcObject = screenStream;
+    document.getElementById('screenPreviewCard').style.display = 'block';
+    screenSharing = true;
+
+    const btn = document.getElementById('screenBtn');
+    const label = document.getElementById('screenLabel');
+    btn.classList.add('active');
+    label.textContent = 'Sharing';
+
+    screenStream.getVideoTracks()[0].addEventListener('ended', () => {
+      stopScreenShare();
+    });
+
+    if (isLive && ws) {
+      ws.send(JSON.stringify({ type: 'stream_update', stream_type: 'camera+screen' }));
+      for (const sid of Object.keys(peerConnections)) {
+        addScreenTracksToPeer(sid);
+      }
+    }
+  } catch (e) {
+    console.error('Screen share failed:', e);
+  }
+}
+
+function stopScreenShare() {
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+  }
+
+  document.getElementById('screenPreview').srcObject = null;
+  document.getElementById('screenPreviewCard').style.display = 'none';
+  screenSharing = false;
+
+  const btn = document.getElementById('screenBtn');
+  const label = document.getElementById('screenLabel');
+  btn.classList.remove('active');
+  label.textContent = 'Share Screen';
+
+  if (isLive && ws) {
+    ws.send(JSON.stringify({ type: 'stream_update', stream_type: 'camera' }));
+  }
+}
+
+function goLive() {
+  if (isLive) return;
+  if (!cameraStream) {
+    alert('Please enable your camera first');
+    return;
+  }
+
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${location.host}/api/stream/ws/teacher/${roomId}?token=${authToken}`;
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    isLive = true;
+    document.getElementById('liveBadge').classList.add('active');
+    document.getElementById('streamStatus').textContent = 'LIVE';
+    updateStatus('connected', 'You are LIVE!');
+
+    const btn = document.getElementById('goLiveBtn');
+    btn.classList.add('active');
+    document.getElementById('goLiveLabel').textContent = 'LIVE';
+
+    const streamType = screenSharing ? 'camera+screen' : 'camera';
+    ws.send(JSON.stringify({ type: 'stream_update', stream_type: streamType }));
+  };
+
+  ws.onmessage = async (event) => {
+    const data = JSON.parse(event.data);
+
+    if (data.type === 'student_joined') {
+      await handleStudentJoined(data.student_id);
+    } else if (data.type === 'student_left') {
+      handleStudentLeft(data.student_id);
+    } else if (data.type === 'answer') {
+      await handleAnswer(data.source, data.sdp);
+    } else if (data.type === 'ice_candidate') {
+      await handleRemoteIceCandidate(data.source, data.candidate);
+    }
+  };
+
+  ws.onclose = () => {
+    isLive = false;
+    document.getElementById('liveBadge').classList.remove('active');
+    document.getElementById('streamStatus').textContent = 'Disconnected';
+    updateStatus('disconnected', 'Disconnected from server');
+  };
+
+  ws.onerror = () => {
+    updateStatus('disconnected', 'WebSocket error');
+  };
+}
+
+async function handleStudentJoined(studentId) {
+  viewers[studentId] = { id: studentId, joined: new Date().toISOString() };
+  updateViewerList();
+
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  peerConnections[studentId] = pc;
+
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => {
+      pc.addTrack(track, cameraStream);
+    });
+  }
+
+  if (screenStream && screenSharing) {
+    screenStream.getTracks().forEach(track => {
+      pc.addTrack(track, screenStream);
+    });
+  }
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate && ws) {
+      ws.send(JSON.stringify({
+        type: 'ice_candidate',
+        candidate: event.candidate.toJSON(),
+        target: studentId,
+      }));
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      handleStudentLeft(studentId);
+    }
+  };
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  ws.send(JSON.stringify({
+    type: 'offer',
+    sdp: pc.localDescription.toJSON(),
+    target: studentId,
+    stream_kind: screenSharing ? 'camera+screen' : 'camera',
+  }));
+}
+
+function addScreenTracksToPeer(studentId) {
+  const pc = peerConnections[studentId];
+  if (!pc || !screenStream) return;
+
+  screenStream.getTracks().forEach(track => {
+    pc.addTrack(track, screenStream);
+  });
+
+  pc.createOffer().then(offer => {
+    pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({
+      type: 'offer',
+      sdp: pc.localDescription.toJSON(),
+      target: studentId,
+      stream_kind: 'camera+screen',
+    }));
+  });
+}
+
+async function handleAnswer(studentId, sdp) {
+  const pc = peerConnections[studentId];
+  if (!pc) return;
+  try {
+    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  } catch (e) {
+    console.error('Set remote description failed:', e);
+  }
+}
+
+async function handleRemoteIceCandidate(studentId, candidate) {
+  const pc = peerConnections[studentId];
+  if (!pc || !candidate) return;
+  try {
+    await pc.addIceCandidate(new RTCIceCandidate(candidate));
+  } catch (e) {
+    console.error('Add ICE candidate failed:', e);
+  }
+}
+
+function handleStudentLeft(studentId) {
+  delete viewers[studentId];
+  updateViewerList();
+
+  const pc = peerConnections[studentId];
+  if (pc) {
+    pc.close();
+    delete peerConnections[studentId];
+  }
+}
+
+function updateViewerList() {
+  const count = Object.keys(viewers).length;
+  document.getElementById('viewerCount').textContent = count;
+
+  const list = document.getElementById('viewerList');
+  if (count === 0) {
+    list.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;">No viewers yet</div>';
+    return;
+  }
+
+  list.innerHTML = Object.values(viewers).map(v =>
+    `<div class="viewer-item">
+      <div class="viewer-dot"></div>
+      <span class="viewer-name">Student ${v.id}</span>
+    </div>`
+  ).join('');
+}
+
+function updateStatus(type, message) {
+  const bar = document.getElementById('statusBar');
+  bar.className = 'status-bar ' + type;
+  bar.textContent = message;
+}
+
+function copyRoomId() {
+  navigator.clipboard.writeText(roomId).then(() => {
+    alert('Room ID copied!');
+  });
+}
+
+function copyJoinLink() {
+  const link = `${location.origin}/stream/watch/${roomId}`;
+  navigator.clipboard.writeText(link).then(() => {
+    alert('Join link copied!');
+  });
+}
+
+async function endStream() {
+  if (!confirm('End this stream? All viewers will be disconnected.')) return;
+
+  for (const [sid, pc] of Object.entries(peerConnections)) {
+    pc.close();
+  }
+  peerConnections = {};
+  viewers = {};
+
+  if (ws) { ws.close(); ws = null; }
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+
+  try {
+    await fetch(`/api/stream/room/${roomId}/close`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${authToken}` },
+    });
+  } catch (e) {}
+
+  location.reload();
+}
+
+updateViewerList();
+</script>
+</body>
+</html>
