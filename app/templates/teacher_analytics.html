@@ -594,7 +594,14 @@
     </div>
     
     <div class="filter-section">
-      <div class="filter-title">Date & Time Filter</div>
+      <div class="filter-title">Session & Date Filter</div>
+      <div style="margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <label style="font-size: 13px; color: #94a3b8; font-weight: 500;">Filter by Session:</label>
+        <select id="sessionFilter" onchange="onSessionFilterChange()" style="padding: 8px 14px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e5e7eb; font-size: 14px; min-width: 250px;">
+          <option value="">All Sessions</option>
+        </select>
+        <button class="filter-btn clear-btn" onclick="clearSessionFilter()" style="padding: 8px 14px;">Clear Session</button>
+      </div>
       <div class="quick-filters">
         <button class="quick-filter-btn active" onclick="setQuickFilter('today')">Today</button>
         <button class="quick-filter-btn" onclick="setQuickFilter('yesterday')">Yesterday</button>
@@ -695,6 +702,7 @@
     let analyticsData = null;
     let currentFilter = null;
     let alertsInterval = null;
+    let currentSessionId = '';
     
     const emotionEmojis = {
       'happy': '&#128522;', 'surprised': '&#128558;', 'angry': '&#128544;', 'sad': '&#128546;',
@@ -704,10 +712,48 @@
     
     document.addEventListener('DOMContentLoaded', function() {
       initializeDateFilter();
+      loadSessions();
       loadAnalytics();
       initModal();
       startAlertsPolling();
     });
+
+    async function loadSessions() {
+      try {
+        const resp = await fetch('/api/sessions/active');
+        const data = await resp.json();
+        const select = document.getElementById('sessionFilter');
+        select.innerHTML = '<option value="">All Sessions</option>';
+        if (data.sessions) {
+          data.sessions.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.session_id;
+            opt.textContent = `${s.session_name} (${s.student_count || 0} students)`;
+            select.appendChild(opt);
+          });
+        }
+        // Check URL param
+        const urlParams = new URLSearchParams(window.location.search);
+        const sid = urlParams.get('session_id');
+        if (sid) {
+          select.value = sid;
+          currentSessionId = sid;
+        }
+      } catch (e) {
+        console.error('Failed to load sessions:', e);
+      }
+    }
+
+    function onSessionFilterChange() {
+      currentSessionId = document.getElementById('sessionFilter').value;
+      loadAnalytics();
+    }
+
+    function clearSessionFilter() {
+      document.getElementById('sessionFilter').value = '';
+      currentSessionId = '';
+      loadAnalytics();
+    }
     
     function initializeDateFilter() {
       const today = new Date().toISOString().split('T')[0];
@@ -778,8 +824,18 @@
     }
     
     function formatFilterParams() {
-      if (!currentFilter) return '';
-      return `?start_date=${currentFilter.startDate}&start_time=${currentFilter.startTime}&end_date=${currentFilter.endDate}&end_time=${currentFilter.endTime}`;
+      const params = new URLSearchParams();
+      if (currentFilter) {
+        params.append('start_date', currentFilter.startDate);
+        params.append('start_time', currentFilter.startTime);
+        params.append('end_date', currentFilter.endDate);
+        params.append('end_time', currentFilter.endTime);
+      }
+      if (currentSessionId) {
+        params.append('session_id', currentSessionId);
+      }
+      const str = params.toString();
+      return str ? `?${str}` : '';
     }
     
     async function loadAnalytics() {
@@ -802,7 +858,8 @@
     
     async function loadAlerts() {
       try {
-        const response = await fetch('/api/realtime/alerts');
+        const alertParams = currentSessionId ? `?session_id=${currentSessionId}` : '';
+        const response = await fetch(`/api/realtime/alerts${alertParams}`);
         const result = await response.json();
         
         if (result.status === 'success' && result.alerts.length > 0) {
