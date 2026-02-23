@@ -29,8 +29,6 @@ limiter = Limiter(key_func=get_remote_address)
 
 students_data: dict = {}
 student_timelines: dict = {}
-mood_history: dict = {}
-focus_sessions: dict = {}
 data_lock = asyncio.Lock()
 
 # Session storage (in-memory)
@@ -134,8 +132,6 @@ async def lifespan(app: FastAPI):
     print("  - Local webcam analytics (FaceMesh/expressions)")
     print("  - Async API calls with connection pooling")
     print("  - Rate limiting (100 req/min per IP)")
-    print("  - Mood history and trends")
-    print("  - Focus session management")
     print("  - Scalable for 500+ students")
     print("=" * 60)
     yield
@@ -190,20 +186,12 @@ class StudentUpdateRequest(BaseModel):
     face_present_ratio: float = 0.0
     gaze_on_screen_ratio: float = 0.0
     blink_rate: int = 0
-    face_detected_count: int = 0
-    total_frame_count: int = 0
 
 
 class StudentLeaveRequest(BaseModel):
     student_id: str
     name: Optional[str] = None
     session_id: Optional[str] = None
-
-
-class FocusSessionRequest(BaseModel):
-    student_id: str
-    action: str
-    duration_minutes: Optional[int] = 25
 
 
 # -- Helpers --
@@ -237,21 +225,6 @@ async def add_to_timeline(student_id: str, data: dict):
 
         if len(student_timelines[student_id]) > 200:
             student_timelines[student_id] = student_timelines[student_id][-200:]
-
-
-async def add_to_mood_history(student_id: str, emotion: str, attention: int):
-    async with data_lock:
-        if student_id not in mood_history:
-            mood_history[student_id] = []
-
-        mood_history[student_id].append({
-            'timestamp': datetime.now().isoformat(),
-            'emotion': emotion,
-            'attention': attention
-        })
-
-        if len(mood_history[student_id]) > 500:
-            mood_history[student_id] = mood_history[student_id][-500:]
 
 
 # -- Teacher Auth Endpoints --
@@ -420,11 +393,6 @@ async def index(request: Request):
     return templates.TemplateResponse("teacher_dashboard.html", {"request": request})
 
 
-@app.get("/teacher", response_class=HTMLResponse)
-async def teacher_page(request: Request):
-    return templates.TemplateResponse("teacher_dashboard.html", {"request": request})
-
-
 @app.get("/teacher/analytics", response_class=HTMLResponse)
 async def teacher_analytics_page(request: Request):
     return templates.TemplateResponse("teacher_analytics.html", {"request": request})
@@ -481,14 +449,6 @@ async def student_join(request: Request, data: StudentJoinRequest):
             'attention_sum': 0
         }
 
-        focus_sessions[student_id] = {
-            'active': True,
-            'started_at': start_time,
-            'breaks_taken': 0,
-            'total_focus_time': 0,
-            'last_break': None
-        }
-
     if session_id:
         async with session_lock:
             session = content_sessions.get(session_id)
@@ -516,7 +476,6 @@ async def student_join(request: Request, data: StudentJoinRequest):
         "status": "logged",
         "guid": guid,
         "message": f"Student {student_name} joined",
-        "session_info": focus_sessions.get(student_id, {})
     }
 
 
@@ -550,10 +509,7 @@ async def student_update(request: Request, data: StudentUpdateRequest):
         guid = student['guid']
 
     data_dict = data.model_dump()
-    await asyncio.gather(
-        add_to_timeline(student_id, data_dict),
-        add_to_mood_history(student_id, data.emotion, data.attention_score)
-    )
+    await add_to_timeline(student_id, data_dict)
 
     try:
         api_payload = [{
@@ -575,30 +531,7 @@ async def student_update(request: Request, data: StudentUpdateRequest):
     except Exception as e:
         print(f"API warning (non-blocking): {e}")
 
-    break_suggestion = None
-    async with data_lock:
-        session = focus_sessions.get(student_id, {})
-        if session.get('active'):
-            started = datetime.fromisoformat(session['started_at'])
-            elapsed = (datetime.now() - started).total_seconds() / 60
-            last_break = session.get('last_break')
-
-            if last_break:
-                since_break = (datetime.now() - datetime.fromisoformat(last_break)).total_seconds() / 60
-            else:
-                since_break = elapsed
-
-            if since_break >= 25:
-                break_suggestion = {
-                    'type': 'break_reminder',
-                    'message': 'You have been focusing for 25+ minutes. Consider a 5-minute break!',
-                    'focus_time': round(since_break, 1)
-                }
-
-    return {
-        "status": "success",
-        "break_suggestion": break_suggestion
-    }
+    return {"status": "success"}
 
 
 @app.post("/api/student/leave")
@@ -615,8 +548,6 @@ async def student_leave(data: StudentLeaveRequest):
             del students_data[student_id]
         if student_id in student_timelines:
             del student_timelines[student_id]
-        if student_id in focus_sessions:
-            del focus_sessions[student_id]
 
     if session_id:
         async with session_lock:
@@ -627,124 +558,6 @@ async def student_leave(data: StudentLeaveRequest):
                     session["students"].remove(student_id)
 
     return {"status": "logged"}
-
-
-@app.post("/api/focus/session")
-async def manage_focus_session(data: FocusSessionRequest):
-    student_id = data.student_id
-    action = data.action
-
-    async with data_lock:
-        if student_id not in focus_sessions:
-            focus_sessions[student_id] = {
-                'active': False,
-                'started_at': None,
-                'breaks_taken': 0,
-                'total_focus_time': 0,
-                'last_break': None
-            }
-
-        session = focus_sessions[student_id]
-
-        if action == 'start':
-            session['active'] = True
-            session['started_at'] = datetime.now().isoformat()
-            session['last_break'] = None
-            return {"status": "started", "session": session}
-
-        elif action == 'pause':
-            if session['active'] and session['started_at']:
-                started = datetime.fromisoformat(session['started_at'])
-                elapsed = (datetime.now() - started).total_seconds() / 60
-                session['total_focus_time'] += elapsed
-            session['active'] = False
-            return {"status": "paused", "session": session}
-
-        elif action == 'break':
-            session['breaks_taken'] += 1
-            session['last_break'] = datetime.now().isoformat()
-            return {"status": "break_started", "session": session}
-
-        elif action == 'resume':
-            session['active'] = True
-            session['started_at'] = datetime.now().isoformat()
-            return {"status": "resumed", "session": session}
-
-        elif action == 'end':
-            if session['active'] and session['started_at']:
-                started = datetime.fromisoformat(session['started_at'])
-                elapsed = (datetime.now() - started).total_seconds() / 60
-                session['total_focus_time'] += elapsed
-
-            summary = {
-                'total_focus_time': round(session['total_focus_time'], 1),
-                'breaks_taken': session['breaks_taken']
-            }
-
-            session['active'] = False
-            session['started_at'] = None
-            session['total_focus_time'] = 0
-            session['breaks_taken'] = 0
-
-            return {"status": "ended", "summary": summary}
-
-    return {"status": "unknown_action"}
-
-
-@app.get("/api/mood/history/{student_id}")
-async def get_mood_history(student_id: str, limit: int = 50):
-    async with data_lock:
-        history = mood_history.get(student_id, [])
-
-    recent = history[-limit:] if len(history) > limit else history
-
-    if not recent:
-        return {
-            "status": "success",
-            "data": {
-                "history": [],
-                "trends": {},
-                "summary": {}
-            }
-        }
-
-    emotion_counts: dict = {}
-    attention_values: list = []
-
-    for entry in recent:
-        emotion = entry.get('emotion', 'neutral')
-        emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
-        attention_values.append(entry.get('attention', 0))
-
-    avg_attention = sum(attention_values) / len(attention_values) if attention_values else 0
-    dominant_emotion = max(emotion_counts.items(), key=lambda x: x[1])[0] if emotion_counts else 'neutral'
-
-    trend = "stable"
-    if len(attention_values) >= 10:
-        first_half = sum(attention_values[:len(attention_values)//2]) / (len(attention_values)//2)
-        second_half = sum(attention_values[len(attention_values)//2:]) / (len(attention_values) - len(attention_values)//2)
-        if second_half > first_half + 5:
-            trend = "improving"
-        elif second_half < first_half - 5:
-            trend = "declining"
-
-    return {
-        "status": "success",
-        "data": {
-            "history": recent,
-            "trends": {
-                "attention_trend": trend,
-                "dominant_emotion": dominant_emotion,
-                "emotion_distribution": emotion_counts
-            },
-            "summary": {
-                "avg_attention": round(avg_attention, 1),
-                "total_entries": len(recent),
-                "min_attention": min(attention_values) if attention_values else 0,
-                "max_attention": max(attention_values) if attention_values else 0
-            }
-        }
-    }
 
 
 # -- Analytics Endpoints --
@@ -1137,8 +950,6 @@ async def admin_clear():
     async with data_lock:
         students_data.clear()
         student_timelines.clear()
-        mood_history.clear()
-        focus_sessions.clear()
     async with session_lock:
         content_sessions.clear()
     return {"status": "cleared"}
