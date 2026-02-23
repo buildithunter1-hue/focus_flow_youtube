@@ -801,29 +801,52 @@
         // ============================
         // Cleanup
         // ============================
-        async function analyticsLeave() {
+        function analyticsLeave() {
             if (!studentId) return;
             try {
-                await fetch('/api/student/leave', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        student_id: studentId,
-                        name: studentName,
-                        session_id: SESSION_ID
-                    }),
-                    keepalive: true
+                var payload = JSON.stringify({
+                    student_id: studentId,
+                    name: studentName,
+                    session_id: SESSION_ID
                 });
+                navigator.sendBeacon('/api/student/leave',
+                    new Blob([payload], { type: 'application/json' }));
             } catch (e) { /* ignore */ }
         }
 
-        window.addEventListener('beforeunload', async function() {
-            try {
-                isSessionActive = false;
-                if (reportIntervalId) { clearInterval(reportIntervalId); reportIntervalId = null; }
-                await sendReport();
-                await analyticsLeave();
-            } catch (e) { /* ignore */ }
+        window.addEventListener('beforeunload', function() {
+            isSessionActive = false;
+            if (reportIntervalId) { clearInterval(reportIntervalId); reportIntervalId = null; }
+            // Use sendBeacon for reliable delivery during page unload
+            if (batchAccumulator.count > 0 && studentId) {
+                var count = batchAccumulator.count;
+                var avgAttention = Math.round(batchAccumulator.attentionSum / count);
+                var faceRatio = batchAccumulator.facePresentCount / count;
+                var gazeRatio = batchAccumulator.gazeOnScreenCount / count;
+                var dominantEmotion = 'neutral', maxC = 0;
+                for (var emo in batchAccumulator.emotions) {
+                    if (batchAccumulator.emotions[emo] > maxC) {
+                        maxC = batchAccumulator.emotions[emo];
+                        dominantEmotion = emo;
+                    }
+                }
+                var engagementLevel = avgAttention >= 70 ? 'high' : avgAttention >= 40 ? 'medium' : 'low';
+                var updatePayload = JSON.stringify({
+                    student_id: studentId,
+                    name: studentName,
+                    guid: studentGuid,
+                    session_id: SESSION_ID,
+                    face_present_ratio: Number(faceRatio.toFixed(2)),
+                    gaze_on_screen_ratio: Number(gazeRatio.toFixed(2)),
+                    blink_rate: 0,
+                    attention_score: avgAttention,
+                    emotion: dominantEmotion,
+                    engagement_level: engagementLevel
+                });
+                navigator.sendBeacon('/api/student/update',
+                    new Blob([updatePayload], { type: 'application/json' }));
+            }
+            analyticsLeave();
             if (cameraObj) { try { cameraObj.stop(); } catch (e) { /* ignore */ } }
         });
 

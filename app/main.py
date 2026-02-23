@@ -489,7 +489,24 @@ async def student_update(request: Request, data: StudentUpdateRequest):
 
     async with data_lock:
         if student_id not in students_data:
-            raise HTTPException(status_code=404, detail="Student not in session")
+            # Auto-register student if not found (e.g. after server restart)
+            auto_guid = data.guid or f"{student_id}_{uuid.uuid4()}"
+            students_data[student_id] = {
+                'student_id': student_id,
+                'name': data.name or f"Student {student_id}",
+                'guid': auto_guid,
+                'session_id': data.session_id or '',
+                'joined_at': datetime.now().isoformat(),
+                'attention_score': 0,
+                'emotion': 'neutral',
+                'engagement_level': 'low',
+                'face_present_ratio': 0.0,
+                'gaze_on_screen_ratio': 0.0,
+                'blink_rate': 0,
+                'last_update': datetime.now().isoformat(),
+                'total_updates': 0,
+                'attention_sum': 0
+            }
 
         student = students_data[student_id]
 
