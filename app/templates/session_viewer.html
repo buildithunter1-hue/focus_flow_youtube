@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ session_name }} - Focus Flow</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f23;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1a3e, #2d1b69);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .header h1 {
+            font-size: 1.1rem;
+            color: #fff;
+        }
+        .header .session-info {
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 280px;
+            gap: 16px;
+            padding: 16px;
+            height: calc(100vh - 60px);
+        }
+        .video-area {
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .video-area iframe,
+        .video-area video {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .webcam-panel {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .webcam-panel h3 {
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+            color: #9ecfff;
+        }
+        .webcam-container {
+            position: relative;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #000;
+        }
+        .webcam-container video {
+            width: 100%;
+            display: block;
+            border-radius: 8px;
+        }
+        .webcam-container canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+        .stats-panel {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.08);
+            flex: 1;
+        }
+        .stats-panel h3 {
+            font-size: 0.85rem;
+            margin-bottom: 10px;
+            color: #9ecfff;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 0.8rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .stat-label { color: #888; }
+        .stat-value { color: #fff; font-weight: 600; }
+        .attention-bar {
+            width: 100%;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .attention-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease, background 0.5s ease;
+        }
+        .join-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .join-card {
+            background: #1a1a3e;
+            border-radius: 16px;
+            padding: 32px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .join-card h2 { margin-bottom: 8px; color: #fff; }
+        .join-card p { color: #aaa; margin-bottom: 20px; font-size: 0.9rem; }
+        .join-card input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #0f0f23;
+            color: #fff;
+            font-size: 1rem;
+            margin-bottom: 16px;
+        }
+        .join-card button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .join-card button:hover { opacity: 0.9; }
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-dot.active { background: #4ade80; }
+        .status-dot.inactive { background: #ef4444; }
+        .error-banner {
+            background: #7f1d1d;
+            color: #fca5a5;
+            padding: 8px 16px;
+            text-align: center;
+            font-size: 0.85rem;
+            display: none;
+        }
+        @media (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            .video-area { min-height: 300px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ session_name }}</h1>
+        <span class="session-info">
+            <span class="status-dot active" id="statusDot"></span>
+            Teacher: {{ teacher_name }}
+        </span>
+    </div>
+    <div class="error-banner" id="errorBanner"></div>
+
+    <!-- Join Overlay -->
+    <div class="join-overlay" id="joinOverlay">
+        <div class="join-card">
+            <h2>Join Session</h2>
+            <p>{{ session_name }} by {{ teacher_name }}</p>
+            <input type="text" id="studentNameInput" placeholder="Enter your name" autofocus>
+            <button onclick="joinSession()">Join & Start Watching</button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="video-area" id="videoArea">
+            <!-- Video content injected by JS based on content_type -->
+        </div>
+        <div class="sidebar">
+            <div class="webcam-panel">
+                <h3>Your Webcam (Analytics)</h3>
+                <div class="webcam-container">
+                    <video id="webcamVideo" autoplay playsinline muted></video>
+                    <canvas id="webcamCanvas"></canvas>
+                </div>
+            </div>
+            <div class="stats-panel">
+                <h3>Your Focus Stats</h3>
+                <div class="stat-row">
+                    <span class="stat-label">Attention</span>
+                    <span class="stat-value" id="attentionValue">--</span>
+                </div>
+                <div class="attention-bar">
+                    <div class="attention-fill" id="attentionBar" style="width:0%;background:#ef4444;"></div>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Emotion</span>
+                    <span class="stat-value" id="emotionValue">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Engagement</span>
+                    <span class="stat-value" id="engagementValue">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Face Detected</span>
+                    <span class="stat-value" id="faceValue">--</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Gaze On Screen</span>
+                    <span class="stat-value" id="gazeValue">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FaceMesh / MediaPipe -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <!-- HLS.js for HLS streams -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+    <script>
+        // Session data from server
+        const SESSION_ID = "{{ session_id }}";
+        const CONTENT_TYPE = "{{ content_type }}";
+        const CONTENT_URL = "{{ content_url }}";
+        const EMBED_INFO = JSON.parse('{{ embed_info | tojson }}');
+
+        let studentId = null;
+        let studentName = '';
+        let studentGuid = '';
+        let webcamStream = null;
+        let faceMesh = null;
+        let analyticsInterval = null;
+
+        // Analytics counters
+        let faceDetectedCount = 0;
+        let totalFrameCount = 0;
+        let gazeOnScreenCount = 0;
+        let attentionScores = [];
+        let currentEmotion = 'neutral';
+        let currentEngagement = 'low';
+
+        // ── Embed Video ──
+        function embedVideo() {
+            const area = document.getElementById('videoArea');
+
+            if (CONTENT_TYPE === 'youtube') {
+                const embedUrl = EMBED_INFO.embed_url || CONTENT_URL;
+                area.innerHTML = `<iframe src="${embedUrl}" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen style="width:100%;height:100%;border:none;"></iframe>`;
+            } else if (CONTENT_TYPE === 'vimeo') {
+                const embedUrl = EMBED_INFO.embed_url || CONTENT_URL;
+                area.innerHTML = `<iframe src="${embedUrl}"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowfullscreen style="width:100%;height:100%;border:none;"></iframe>`;
+            } else if (CONTENT_TYPE === 'hls') {
+                area.innerHTML = `<video id="hlsVideo" controls autoplay style="width:100%;height:100%;"></video>`;
+                const video = document.getElementById('hlsVideo');
+                if (Hls.isSupported()) {
+                    const hls = new Hls();
+                    hls.loadSource(CONTENT_URL);
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = CONTENT_URL;
+                    video.addEventListener('loadedmetadata', () => video.play());
+                }
+            } else {
+                // mp4 / webm / ogg / direct video
+                area.innerHTML = `<video controls autoplay style="width:100%;height:100%;">
+                    <source src="${CONTENT_URL}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>`;
+            }
+        }
+
+        // ── Join Session ──
+        async function joinSession() {
+            const nameInput = document.getElementById('studentNameInput');
+            studentName = nameInput.value.trim() || 'Anonymous';
+            studentId = 'S_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+
+            try {
+                const resp = await fetch('/api/student/join', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        student_id: studentId,
+                        name: studentName,
+                        session_id: SESSION_ID
+                    })
+                });
+                const data = await resp.json();
+                studentGuid = data.guid || '';
+            } catch (e) {
+                console.error('Join failed:', e);
+            }
+
+            document.getElementById('joinOverlay').style.display = 'none';
+            embedVideo();
+            startWebcam();
+            startAnalyticsLoop();
+        }
+
+        // ── Webcam + FaceMesh ──
+        async function startWebcam() {
+            try {
+                webcamStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 320, height: 240, facingMode: 'user' },
+                    audio: false
+                });
+                const videoEl = document.getElementById('webcamVideo');
+                videoEl.srcObject = webcamStream;
+
+                initFaceMesh(videoEl);
+            } catch (e) {
+                console.warn('Webcam not available:', e);
+                showError('Webcam not available. Analytics will be limited.');
+            }
+        }
+
+        function initFaceMesh(videoEl) {
+            try {
+                faceMesh = new FaceMesh({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+                });
+
+                faceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: true,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                faceMesh.onResults(onFaceMeshResults);
+
+                const camera = new Camera(videoEl, {
+                    onFrame: async () => {
+                        if (faceMesh) {
+                            await faceMesh.send({ image: videoEl });
+                        }
+                    },
+                    width: 320,
+                    height: 240
+                });
+                camera.start();
+            } catch (e) {
+                console.warn('FaceMesh init failed:', e);
+            }
+        }
+
+        function onFaceMeshResults(results) {
+            totalFrameCount++;
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                faceDetectedCount++;
+                const landmarks = results.multiFaceLandmarks[0];
+
+                // Gaze estimation: check if nose tip is roughly centered
+                const noseTip = landmarks[1];
+                if (noseTip && noseTip.x > 0.2 && noseTip.x < 0.8 && noseTip.y > 0.2 && noseTip.y < 0.8) {
+                    gazeOnScreenCount++;
+                }
+
+                // Simple emotion/engagement heuristics from face landmarks
+                analyzeExpression(landmarks);
+            }
+
+            // Draw on canvas
+            const canvas = document.getElementById('webcamCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 320;
+            canvas.height = 240;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                // Draw simple face outline
+                ctx.strokeStyle = '#4ade80';
+                ctx.lineWidth = 1;
+                const lm = results.multiFaceLandmarks[0];
+                const faceOutline = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
+                    397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+                    172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10];
+                ctx.beginPath();
+                for (let i = 0; i < faceOutline.length; i++) {
+                    const idx = faceOutline[i];
+                    if (idx < lm.length) {
+                        const x = lm[idx].x * canvas.width;
+                        const y = lm[idx].y * canvas.height;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                }
+                ctx.stroke();
+            }
+        }
+
+        function analyzeExpression(landmarks) {
+            // Simplified expression analysis using key facial landmarks
+            // Mouth openness (landmarks 13=upper lip, 14=lower lip)
+            const upperLip = landmarks[13];
+            const lowerLip = landmarks[14];
+            const mouthOpen = Math.abs(upperLip.y - lowerLip.y);
+
+            // Eye openness (landmarks 159=upper eyelid, 145=lower eyelid for left eye)
+            const upperEyelid = landmarks[159];
+            const lowerEyelid = landmarks[145];
+            const eyeOpen = Math.abs(upperEyelid.y - lowerEyelid.y);
+
+            // Eyebrow raise (landmarks 70=eyebrow, 159=eyelid)
+            const eyebrow = landmarks[70];
+            const browRaise = Math.abs(eyebrow.y - upperEyelid.y);
+
+            // Simple emotion classification
+            if (mouthOpen > 0.06) {
+                currentEmotion = 'surprised';
+                currentEngagement = 'high';
+            } else if (mouthOpen > 0.03 && browRaise > 0.04) {
+                currentEmotion = 'happy';
+                currentEngagement = 'high';
+            } else if (eyeOpen < 0.015) {
+                currentEmotion = 'tired';
+                currentEngagement = 'low';
+            } else if (browRaise < 0.02) {
+                currentEmotion = 'confused';
+                currentEngagement = 'medium';
+            } else {
+                currentEmotion = 'neutral';
+                currentEngagement = 'medium';
+            }
+        }
+
+        // ── Analytics Loop ──
+        function startAnalyticsLoop() {
+            analyticsInterval = setInterval(async () => {
+                if (!studentId) return;
+
+                const faceRatio = totalFrameCount > 0 ? faceDetectedCount / totalFrameCount : 0;
+                const gazeRatio = totalFrameCount > 0 ? gazeOnScreenCount / totalFrameCount : 0;
+
+                // Compute attention score (0-100)
+                const avgAttention = Math.round(
+                    (faceRatio * 40) + (gazeRatio * 40) + (currentEngagement === 'high' ? 20 : currentEngagement === 'medium' ? 10 : 0)
+                );
+
+                // Update UI
+                updateStatsUI(avgAttention, faceRatio, gazeRatio);
+
+                // Post to backend
+                try {
+                    const payload = {
+                        student_id: studentId,
+                        name: studentName,
+                        guid: studentGuid,
+                        session_id: SESSION_ID,
+                        face_present_ratio: Number(faceRatio.toFixed(2)),
+                        gaze_on_screen_ratio: Number(gazeRatio.toFixed(2)),
+                        blink_rate: 0,
+                        attention_score: avgAttention,
+                        emotion: currentEmotion,
+                        engagement_level: currentEngagement
+                    };
+
+                    const resp = await fetch('/api/student/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const data = await resp.json();
+                    if (data.break_suggestion) {
+                        showError(data.break_suggestion.message);
+                        setTimeout(() => { document.getElementById('errorBanner').style.display = 'none'; }, 10000);
+                    }
+                } catch (e) {
+                    console.error('Update failed:', e);
+                }
+
+                // Reset counters for next interval
+                faceDetectedCount = 0;
+                totalFrameCount = 0;
+                gazeOnScreenCount = 0;
+            }, 5000); // every 5 seconds
+        }
+
+        function updateStatsUI(attention, faceRatio, gazeRatio) {
+            document.getElementById('attentionValue').textContent = attention + '%';
+            document.getElementById('emotionValue').textContent = currentEmotion;
+            document.getElementById('engagementValue').textContent = currentEngagement;
+            document.getElementById('faceValue').textContent = Math.round(faceRatio * 100) + '%';
+            document.getElementById('gazeValue').textContent = Math.round(gazeRatio * 100) + '%';
+
+            const bar = document.getElementById('attentionBar');
+            bar.style.width = attention + '%';
+            if (attention >= 70) bar.style.background = '#4ade80';
+            else if (attention >= 40) bar.style.background = '#facc15';
+            else bar.style.background = '#ef4444';
+        }
+
+        function showError(msg) {
+            const banner = document.getElementById('errorBanner');
+            banner.textContent = msg;
+            banner.style.display = 'block';
+        }
+
+        // ── Cleanup on page unload ──
+        window.addEventListener('beforeunload', () => {
+            if (studentId) {
+                navigator.sendBeacon('/api/student/leave', JSON.stringify({
+                    student_id: studentId,
+                    name: studentName,
+                    session_id: SESSION_ID
+                }));
+            }
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(t => t.stop());
+            }
+            if (analyticsInterval) {
+                clearInterval(analyticsInterval);
+            }
+        });
+
+        // Allow enter key to join
+        document.getElementById('studentNameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') joinSession();
+        });
+    </script>
+</body>
+</html>
