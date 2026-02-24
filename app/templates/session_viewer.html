@@ -1018,23 +1018,32 @@
         }
 
         // ============================
-        // Start Focus Tracker
+        // Start Focus Tracker (lazy-load emotions)
         // ============================
         async function startFocusTracker() {
             if (isSessionActive) return;
 
-            setFocusStatus('connecting', 'Loading focus models...');
+            setFocusStatus('connecting', 'Starting face tracker...');
             if (!attentionChart) initAttentionChart();
 
-            await loadFaceApiModels();
+            // Join analytics + start MediaPipe immediately (no waiting for emotion models)
             await joinAnalytics();
-
             isSessionActive = true;
 
             setTimeout(sendReport, 10000);
             reportIntervalId = setInterval(sendReport, POLL_INTERVAL);
 
+            // Start FaceMesh + camera right away
             await startMediaPipe();
+
+            // Load emotion models in the background (non-blocking)
+            loadFaceApiModels().then(function(success) {
+                if (success) {
+                    console.log('Emotion models loaded in background');
+                } else {
+                    console.warn('Emotion models failed to load — using neutral fallback');
+                }
+            });
         }
 
         // ============================
