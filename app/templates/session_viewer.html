@@ -118,6 +118,10 @@
 
         .chart-wrap { height: 160px; margin-top: 10px; }
 
+        /* Default desktop: focus-mobile-row is just a block wrapper */
+        .focus-mobile-row { display: block; }
+        .mobile-stats-row { display: block; }
+
         .debug-info {
             font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
             font-size: 10px; color: #94a3b8; margin-top: 8px;
@@ -152,10 +156,242 @@
         }
         .join-card button:hover { transform: translateY(-2px); }
 
+        /* ===== Mobile Responsive ===== */
         @media (max-width: 900px) {
-            .main-container { grid-template-columns: 1fr; min-height: auto; }
-            .video-area { min-height: 250px; }
-            .metrics-grid { grid-template-columns: 1fr; }
+            .main-container {
+                grid-template-columns: 1fr;
+                min-height: auto;
+                gap: 10px;
+                padding: 10px;
+            }
+
+            /* Move focus panel ABOVE the video */
+            .focus-panel {
+                order: -1;
+                padding: 12px 14px;
+                border-radius: 12px;
+            }
+
+            .left-column {
+                order: 0;
+            }
+
+            .video-area {
+                min-height: 220px;
+            }
+
+            .card-title {
+                font-size: 13px;
+                margin-bottom: 8px;
+            }
+
+            .status-bar {
+                padding: 6px 8px;
+                font-size: 11px;
+                margin-bottom: 8px;
+                border-radius: 6px;
+            }
+
+            /* Compact cam + metrics row */
+            .focus-mobile-row {
+                display: flex;
+                gap: 10px;
+                align-items: stretch;
+            }
+
+            .focus-cam {
+                width: 100px;
+                min-width: 100px;
+                aspect-ratio: 1/1;
+                border-radius: 10px;
+                flex-shrink: 0;
+            }
+
+            .metrics-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 6px;
+                margin-top: 0;
+                flex: 1;
+            }
+
+            .metric-card {
+                padding: 8px 6px;
+                border-radius: 8px;
+            }
+
+            .metric-label {
+                font-size: 8px;
+                margin-bottom: 3px;
+                letter-spacing: 0.3px;
+            }
+
+            .metric-value {
+                font-size: 15px;
+            }
+
+            .emotion-display {
+                font-size: 20px;
+            }
+
+            .emotion-name {
+                font-size: 9px;
+            }
+
+            /* Compact bottom stats */
+            .attention-bar-wrap {
+                margin-top: 8px;
+            }
+
+            .attention-bar {
+                height: 6px;
+            }
+
+            .mobile-stats-row {
+                display: flex;
+                gap: 12px;
+                margin-top: 6px;
+            }
+
+            .stat-row {
+                padding: 3px 0;
+                font-size: 0.7rem;
+                border-bottom: none;
+                flex: 1;
+            }
+
+            .debug-info {
+                font-size: 9px;
+                padding: 4px 6px;
+                margin-top: 6px;
+            }
+
+            /* Hide chart on mobile portrait to save space */
+            .chart-wrap {
+                height: 100px;
+                margin-top: 8px;
+            }
+
+            .header {
+                padding: 10px 14px;
+            }
+
+            .header h1 {
+                font-size: 1rem;
+            }
+
+            .header .session-info {
+                font-size: 0.75rem;
+            }
+        }
+
+        /* ===== Mobile Landscape ===== */
+        @media (max-width: 900px) and (orientation: landscape) {
+            .main-container {
+                grid-template-columns: 1fr;
+                gap: 8px;
+                padding: 8px;
+            }
+
+            .focus-panel {
+                order: -1;
+                padding: 10px 12px;
+            }
+
+            .card-title {
+                font-size: 12px;
+                margin-bottom: 6px;
+            }
+
+            .status-bar {
+                padding: 4px 8px;
+                font-size: 10px;
+                margin-bottom: 6px;
+            }
+
+            .focus-cam {
+                width: 80px;
+                min-width: 80px;
+            }
+
+            .metrics-grid {
+                gap: 4px;
+            }
+
+            .metric-card {
+                padding: 6px 4px;
+            }
+
+            .metric-label {
+                font-size: 7px;
+                margin-bottom: 2px;
+            }
+
+            .metric-value {
+                font-size: 13px;
+            }
+
+            .emotion-display {
+                font-size: 16px;
+            }
+
+            .emotion-name {
+                font-size: 8px;
+            }
+
+            .attention-bar-wrap {
+                margin-top: 6px;
+            }
+
+            .attention-bar {
+                height: 5px;
+            }
+
+            /* Hide chart and debug in landscape to keep it ultra compact */
+            .chart-wrap {
+                display: none;
+            }
+
+            .debug-info {
+                display: none;
+            }
+
+            .stat-row {
+                font-size: 0.65rem;
+                padding: 2px 0;
+            }
+
+            .video-area {
+                min-height: 200px;
+            }
+
+            .header {
+                padding: 6px 12px;
+            }
+
+            .header h1 {
+                font-size: 0.9rem;
+            }
+        }
+
+        /* ===== Very small phones ===== */
+        @media (max-width: 480px) {
+            .focus-cam {
+                width: 80px;
+                min-width: 80px;
+            }
+
+            .metric-value {
+                font-size: 13px;
+            }
+
+            .emotion-display {
+                font-size: 18px;
+            }
+
+            .video-area {
+                min-height: 200px;
+                aspect-ratio: auto;
+            }
         }
     </style>
 </head>
@@ -186,32 +422,35 @@
             </div>
         </div>
 
-        <!-- Right sidebar: Focus Tracker -->
+        <!-- Focus Tracker (moves above video on mobile) -->
         <div class="focus-panel">
             <div class="card-title">Focus Tracker</div>
             <div id="focusStatusBar" class="status-bar connecting">Initializing focus tracker...</div>
 
-            <div class="focus-cam">
-                <video id="webcam" autoplay muted playsinline></video>
-                <canvas id="canvas"></canvas>
-            </div>
-            <div class="debug-info" id="debugInfo">Initializing face detection...</div>
+            <div class="focus-mobile-row">
+                <div class="focus-cam">
+                    <video id="webcam" autoplay muted playsinline></video>
+                    <canvas id="canvas"></canvas>
+                </div>
 
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-label">Attention</div>
-                    <div class="metric-value" id="attentionScore">--</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Engagement</div>
-                    <div class="metric-value" id="engagementLevel">--</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-label">Mood</div>
-                    <div class="emotion-display" id="emotionDisplay">--</div>
-                    <div class="emotion-name" id="emotionName">detecting...</div>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Attention</div>
+                        <div class="metric-value" id="attentionScore">--</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Engagement</div>
+                        <div class="metric-value" id="engagementLevel">--</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Mood</div>
+                        <div class="emotion-display" id="emotionDisplay">--</div>
+                        <div class="emotion-name" id="emotionName">detecting...</div>
+                    </div>
                 </div>
             </div>
+
+            <div class="debug-info" id="debugInfo">Initializing face detection...</div>
 
             <div class="attention-bar-wrap">
                 <div class="attention-bar">
@@ -219,7 +458,7 @@
                 </div>
             </div>
 
-            <div style="margin-top:10px;">
+            <div class="mobile-stats-row" style="margin-top:10px;">
                 <div class="stat-row">
                     <span class="stat-label">Face Detected</span>
                     <span class="stat-value" id="faceValue">--</span>
