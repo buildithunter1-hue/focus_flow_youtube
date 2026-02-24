@@ -619,7 +619,7 @@ async def analytics_overview(
             guid = api_session.get('strGuid', '')
             int_id = api_session.get('intId')
 
-            if student_id and int_id:
+            if student_id is not None and int_id is not None:
                 tasks.append(fetch_student_events(student_id, guid, int_id))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
