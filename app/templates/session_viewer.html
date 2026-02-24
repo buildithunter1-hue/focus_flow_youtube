@@ -417,7 +417,8 @@
         <div class="join-card">
             <h2>Join Session</h2>
             <p>{{ session_name }} by {{ teacher_name }}</p>
-            <input type="text" id="studentNameInput" placeholder="Enter your name" autofocus>
+            <input type="number" id="studentIdInput" placeholder="Enter your Student ID" autofocus min="1" style="margin-bottom:10px;">
+            <input type="text" id="studentNameInput" placeholder="Enter your name (optional)">
             <button onclick="joinSession()">Join &amp; Start Watching</button>
         </div>
     </div>
@@ -581,9 +582,17 @@
         // Join Session
         // ============================
         async function joinSession() {
+            var idInput = document.getElementById('studentIdInput');
             var nameInput = document.getElementById('studentNameInput');
-            studentName = nameInput.value.trim() || 'Anonymous';
-            studentId = 'S_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+            var rawId = idInput.value.trim();
+            if (!rawId || isNaN(rawId) || parseInt(rawId) < 1) {
+                idInput.style.border = '2px solid #ef4444';
+                idInput.placeholder = 'Please enter a valid numeric Student ID';
+                idInput.focus();
+                return;
+            }
+            studentId = rawId;
+            studentName = nameInput.value.trim() || ('Student ' + studentId);
 
             document.getElementById('joinOverlay').style.display = 'none';
             embedVideo();
@@ -1105,6 +1114,9 @@
             if (cameraObj) { try { cameraObj.stop(); } catch (e) { /* ignore */ } }
         });
 
+        document.getElementById('studentIdInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') joinSession();
+        });
         document.getElementById('studentNameInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') joinSession();
         });
