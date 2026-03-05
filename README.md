@@ -24,20 +24,39 @@ poetry install
 
 ### 2. Set teacher credentials
 
+**Linux / macOS:**
 ```bash
 export TEACHER_CREDENTIALS="admin:yourpassword"
 ```
 
-For multiple teachers:
+**Windows PowerShell:**
+```powershell
+$env:TEACHER_CREDENTIALS="admin:yourpassword"
+```
 
-```bash
-export TEACHER_CREDENTIALS="admin:pass123,teacher2:pass456"
+**Windows CMD:**
+```cmd
+set TEACHER_CREDENTIALS=admin:yourpassword
+```
+
+For multiple teachers, comma-separate them:
+```
+admin:pass123,teacher2:pass456
 ```
 
 ### 3. Start the server
 
+Run from the **project root** directory (not the `app` folder):
+
 ```bash
 poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Or if using pip/venv instead of Poetry:
+
+```bash
+pip install fastapi[standard] jinja2 httpx aiofiles python-multipart slowapi
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The app will be available at `http://localhost:8000`
